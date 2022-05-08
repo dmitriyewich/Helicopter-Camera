@@ -2,8 +2,8 @@ script_name('Helicopter-Camera')
 script_author('dmitriyewich, https://vk.com/dmitriyewichmods')
 script_dependencies("mimgui", "sampfuncs")
 script_properties('work-in-pause')
-script_version("1.5")
-script_version_number(150)
+script_version("1.5.1")
+script_version_number(151)
 
 local script = thisScript()
 require"lib.moonloader"
@@ -17,6 +17,61 @@ local new, str, sizeof = imgui.new, ffi.string, ffi.sizeof
 local lencoding, encoding = pcall(require, 'encoding')
 encoding.default = 'CP1251'
 u8 = encoding.UTF8
+
+-- Authors: Roberto Ierusalimschy and Andre Carregal--
+local performResume, handleReturnValue
+local oldpcall, oldxpcall = pcall, xpcall
+local pack = table.pack or function(...) return {n = select("#", ...), ...} end
+local unpack = table.unpack or unpack
+local running = coroutine.running
+local coromap = setmetatable({}, { __mode = "k" })
+
+function handleReturnValue(err, co, status, ...)
+    if not status then
+        return false, err(debug.traceback(co, (...)), ...)
+    end
+    if coroutine.status(co) == 'suspended' then
+        return performResume(err, co, coroutine.yield(...))
+    else
+        return true, ...
+    end
+end
+
+function performResume(err, co, ...)
+    return handleReturnValue(err, co, coroutine.resume(co, ...))
+end
+
+function id(trace, ...)
+    return trace
+end
+
+function coxpcall(f, err, ...)
+    local current = running()
+    if not current then
+        if err == id then
+            return oldpcall(f, ...)
+        else
+            if select("#", ...) > 0 then
+                local oldf, params = f, pack(...)
+                f = function() return oldf(unpack(params, 1, params.n)) end
+            end
+            return oldxpcall(f, err)
+        end
+    else
+        local res, co = oldpcall(coroutine.create, f)
+        if not res then
+            local newf = function(...) return f(...) end
+            co = coroutine.create(newf)
+        end
+        coromap[co] = current
+        return performResume(err, co, ...)
+    end
+end
+
+function copcall(f, ...)
+    return coxpcall(f, id, ...)
+end
+--
 
 -- AUTHOR main hooks lib: RTD/RutreD(https://www.blast.hk/members/126461/)
 ffi.cdef[[
@@ -406,7 +461,8 @@ local config = {}
 
 function defalut_config()
 	config = {
-		["MAIN"] = {["heli_camera"] = {['z'] = 0.5}, ['cmd'] = 'BC', ["language"] = "RU",
+		["MAIN"] = {["heli_camera"] = {['z'] = 0.5}, ['cmd'] = 'BC',
+				["language"] = {['compass'] = "EN", ['zones'] = "RU"},
 				["zones"] = {['size'] = 0.0, ['dist'] = 1000},
 				["light"] = {['multiplier'] = 4, ['auto'] = true, ['size'] = 5, ['intensity'] = 255},
 				["vehicle"] = {[497] = 497}},
@@ -614,7 +670,7 @@ if limgui then
 	sizeX, sizeY = getScreenResolution()
 
 
-	local qweeqe = config.MAIN.language == "RU" and 1 or 2
+	local qweeqe = config.MAIN.language.zones == "RU" and 1 or 2
 	table.sort(config.zones, function(a,b) return a[qweeqe] < b[qweeqe] end)
 	local texts_zones = {}
 	for i = 1, #config.zones do
@@ -756,17 +812,17 @@ if limgui then
 
 			imgui.SetCursorPosY(imgui.GetCursorPosY() - 10)
 			if imgui.CollapsingHeader('Районы') then
-				if config.MAIN.language == "RU" then imgui.Text("RU") else imgui.TextDisabled("RU") end
+				if config.MAIN.language.zones == "RU" then imgui.Text("RU") else imgui.TextDisabled("RU") end
 				if imgui.IsItemClicked(0) then
-					config.MAIN.language = "RU"
+					config.MAIN.language.zones = "RU"
 					savejson(convertTableToJsonString(config), "moonloader/Helicopter-Camera/Helicopter-Camera.json")
 				end
 				imgui.SameLine(nil, 0)
 				imgui.Text("|")
 				imgui.SameLine(nil, 0)
-				if config.MAIN.language == "EN" then imgui.Text("EN") else imgui.TextDisabled("EN") end
+				if config.MAIN.language.zones == "EN" then imgui.Text("EN") else imgui.TextDisabled("EN") end
 				if imgui.IsItemClicked(0) then
-					config.MAIN.language = "EN"
+					config.MAIN.language.zones = "EN"
 					savejson(convertTableToJsonString(config), "moonloader/Helicopter-Camera/Helicopter-Camera.json")
 				end
 				imgui.SameLine(nil, 0)
@@ -790,7 +846,7 @@ if limgui then
 					if config.zones[i] == nil then goto continue end
 					if config.zones[i][3] ~= nil and isPointOnScreen(config.zones[i][3], config.zones[i][4], config.zones[i][5], 0.5) then text_rar = ' !+! ' else text_rar = "" end
 
-					if imgui.Button(text_rar..(config.MAIN.language == "RU" and config.zones[i][1] or config.zones[i][2]) .. '##mainbutton'..i, imgui.ImVec2(112, 0)) then
+					if imgui.Button(text_rar..(config.MAIN.language.zones == "RU" and config.zones[i][1] or config.zones[i][2]) .. '##mainbutton'..i, imgui.ImVec2(112, 0)) then
 						imgui.OpenPopup("##Popup"..i)
 						key_res, res_ru, res_en, res_x, res_y, res_z = i, config.zones[i][1], config.zones[i][2], config.zones[i][3], config.zones[i][4], config.zones[i][5]
 					end
@@ -799,7 +855,7 @@ if limgui then
 						if config.zones[i][3] ~= nil and isPointOnScreen(config.zones[i][3], config.zones[i][4], config.zones[i][5], 0.5) then
 							local result, xx, yy, zz, _, _ = convert3DCoordsToScreenEx(config.zones[i][3], config.zones[i][4], config.zones[i][5], true, true)
 							if result then
-								setText(zones_text[i], RusToGame(u8:decode(config.zones[i][config.MAIN.language == "RU" and 1 or 2])), convertW(xx).x, convertW(yy).y, config.MAIN.zones.size+0.2, (config.MAIN.zones.size*4)+1.1, 2, 2, '0xFFFF0000', 0.5, 0x15FF0000, 500, 500, false, true, true)
+								setText(zones_text[i], RusToGame(u8:decode(config.zones[i][config.MAIN.language.zones == "RU" and 1 or 2])), convertW(xx).x, convertW(yy).y, config.MAIN.zones.size+0.2, (config.MAIN.zones.size*4)+1.1, 2, 2, '0xFFFF0000', 0.5, 0x15FF0000, 500, 500, false, true, true)
 							end
 						end
 					end
@@ -813,7 +869,7 @@ if limgui then
 						if config.zones[i][3] ~= nil and isPointOnScreen(config.zones[i][3], config.zones[i][4], config.zones[i][5], 0.5) then
 							local result, xx, yy, zz, _, _ = convert3DCoordsToScreenEx(config.zones[i][3], config.zones[i][4], config.zones[i][5], true, true)
 							if result then
-								setText(zones_text[i], RusToGame(u8:decode(config.zones[i][config.MAIN.language == "RU" and 1 or 2])), convertW(xx).x, convertW(yy).y, config.MAIN.zones.size+0.2, (config.MAIN.zones.size*4)+1.1, 2, 2, '0xFFFF0000', 0.5, 0x15FF0000, 500, 500, false, true, true)
+								setText(zones_text[i], RusToGame(u8:decode(config.zones[i][config.MAIN.language.zones == "RU" and 1 or 2])), convertW(xx).x, convertW(yy).y, config.MAIN.zones.size+0.2, (config.MAIN.zones.size*4)+1.1, 2, 2, '0xFFFF0000', 0.5, 0x15FF0000, 500, 500, false, true, true)
 							end
 						end
 						imgui.PushItemWidth(174)
@@ -961,6 +1017,21 @@ if limgui then
 			imgui.Separator()
 
 			if imgui.CollapsingHeader('Прочее') then
+				if config.MAIN.language.compass == "RU" then imgui.Text("RU") else imgui.TextDisabled("RU") end
+				if imgui.IsItemClicked(0) then
+					config.MAIN.language.compass = "RU"
+					savejson(convertTableToJsonString(config), "moonloader/Helicopter-Camera/Helicopter-Camera.json")
+				end
+				imgui.SameLine(nil, 0)
+				imgui.Text("|")
+				imgui.SameLine(nil, 0)
+				if config.MAIN.language.compass == "EN" then imgui.Text("EN") else imgui.TextDisabled("EN") end
+				if imgui.IsItemClicked(0) then
+					config.MAIN.language.compass = "EN"
+					savejson(convertTableToJsonString(config), "moonloader/Helicopter-Camera/Helicopter-Camera.json")
+				end
+				imgui.SameLine(nil, 0)
+				imgui.Text("	Изменение языка компаса")
 				imgui.PushItemWidth(150)
 				if imgui.SliderFloat("Размер шрифта районов##zones_size", zones_size, -0.2, 0.2) then
 					config.MAIN.zones.size = zones_size[0]
@@ -1091,15 +1162,17 @@ function AddHeliSearchLight(origin, target, targetRadius, power, coronaIndex, un
 	if active and sx >= 0 and sy >= 0 and sx < sw and sy < sh then
 	local px, py, pz = getActiveCameraPointAt()
 	local posX1, posY1, posZ1 = convertScreenCoordsToWorld3D(sw/2, sh/2, 700.0)
-	local result, colpoint = processLineOfSight(px, py, pz-1, posX1, posY1, posZ1, true, false, false, true, false, false, false)
-	if result and colpoint.entity ~= 0 then
+	-- local result, colpoint = processLineOfSight(px, py, pz-1, posX1, posY1, posZ1, true, false, false, true, false, false, false)
+	local lres, result, colpoint = copcall(processLineOfSight, px, py, pz-1, posX1, posY1, posZ1, true, false, false, true, false, false, false)
+	if lres and result and colpoint.entity ~= 0 then
 		local normal = colpoint.normal
 		local pos = Vector3D(colpoint.pos[1], colpoint.pos[2], colpoint.pos[3]) - (Vector3D(normal[1], normal[2], normal[3]) * 0.1)
 		local zOffset = 300
 		if normal[3] >= 0.5 then zOffset = 1 end
-		local result, colpoint2 = processLineOfSight(pos.x, pos.y, pos.z + zOffset, pos.x, pos.y, pos.z - 0.3,
-		true, false, false, true, false, false, false)
-		if result then
+		-- local result, colpoint2 = processLineOfSight(pos.x, pos.y, pos.z + zOffset, pos.x, pos.y, pos.z - 0.3, true, false, false, true, false, false, false)
+		local lres2, result2, colpoint2 = copcall(processLineOfSight, pos.x, pos.y, pos.z + zOffset, pos.x, pos.y, pos.z - 0.3, true, false, false, true, false, false, false)
+		
+		if lres2 and result2 then
 			pos = Vector3D(colpoint2.pos[1], colpoint2.pos[2], colpoint2.pos[3] + 1)
 			target = ffi.new("float[3]", pos.x, pos.y, pos.z+1)
 			end
@@ -1140,7 +1213,8 @@ function main()
 	lua_thread.create(light_thread)
 	lua_thread.create(draw_info)
 
-	compassText = {[-180] = "S", [-135] = "SW", [-90] = "W", [-45] = "NW", [0] = "N", [45] = "NE", [90] = "E", [135] = "SE", [180] = "S",}
+	compassTextEN = {[-180] = "S", [-135] = "SE", [-90] = "E", [-45] = "NE", [0] = "N", [45] = "NW", [90] = "W", [135] = "SW", [180] = "S"}
+	compassTextRU = {[-180] = "Ю", [-135] = "ЮВ", [-90] = "В", [-45] = "СВ", [0] = "С", [45] = "СЗ", [90] = "З", [135] = "ЮЗ", [180] = "Ю"}
 	test, test2, test_text3, zones_text = {}, {}, {}, {}
 	for i = 0, 360 do
 		test[i] = getFreeGxtKey()
@@ -1167,15 +1241,16 @@ function light_thread()
 			if light_active and sx >= 0 and sy >= 0 and sx < sw and sy < sh then
 			local px, py, pz = getActiveCameraPointAt()
 			local posX1, posY1, posZ1 = convertScreenCoordsToWorld3D(sw/2, sh/2, 700.0)
-			local result, colpoint = processLineOfSight(px, py, pz-1, posX1, posY1, posZ1, true, false, false, true, false, false, false)
-			if result and colpoint.entity ~= 0 then
+			-- local result, colpoint = processLineOfSight(px, py, pz-1, posX1, posY1, posZ1, true, false, false, true, false, true, false)
+			local lres, result, colpoint = copcall(processLineOfSight, px, py, pz-1, posX1, posY1, posZ1, true, false, false, true, false, true, false)
+			if lres and result and colpoint.entity ~= 0 then
 				local normal = colpoint.normal
 				local pos = Vector3D(colpoint.pos[1], colpoint.pos[2], colpoint.pos[3]) - (Vector3D(normal[1], normal[2], normal[3]) * 0.1)
 				local zOffset = 300
 				if normal[3] >= 0.5 then zOffset = 1 end
-				local result, colpoint2 = processLineOfSight(pos.x, pos.y, pos.z + zOffset, pos.x, pos.y, pos.z - 0.3,
-				true, false, false, true, false, false, false)
-				if result then
+				-- local result, colpoint2 = processLineOfSight(pos.x, pos.y, pos.z + zOffset, pos.x, pos.y, pos.z - 0.3, true, false, false, true, false, false, false)
+				local lres2, result2, colpoint2 = copcall(processLineOfSight, pos.x, pos.y, pos.z + zOffset, pos.x, pos.y, pos.z - 0.3, true, false, false, true, false, false, false)
+				if lres2 and result2 then
 					pos = Vector3D(colpoint2.pos[1], colpoint2.pos[2], colpoint2.pos[3] + 1)
 
 					local GroundZ = getGroundZFor3dCoord(pos.x, pos.y, pos.z)
@@ -1205,7 +1280,7 @@ function zones_thread()
 						local result, xx, yy, zz, _, _ = convert3DCoordsToScreenEx(x, y, z, true, true)
 						local GroundZ = getGroundZFor3dCoord(x, y, z)
 						if result then
-							setText(zones_text[i], RusToGame(u8:decode(tbl_zone[i][config.MAIN.language == "RU" and 1 or 2])), convertW(xx).x, convertW(yy).y, config.MAIN.zones.size+0.2, (config.MAIN.zones.size*4)+1.1, 2, 2, '0xFFFFFFFF', 0.5, 0x15000000, 500, 500, false, true, true)
+							setText(zones_text[i], RusToGame(u8:decode(tbl_zone[i][config.MAIN.language.zones == "RU" and 1 or 2])), convertW(xx).x, convertW(yy).y, config.MAIN.zones.size+0.2, (config.MAIN.zones.size*4)+1.1, 2, 2, '0xFFFFFFFF', 0.5, 0x15000000, 500, 500, false, true, true)
 						end
 					end
 				end
@@ -1223,9 +1298,10 @@ function car()
 		if active then
 			sight_posX, sight_posY, sight_posZ = 0, 0, 0
 			local pos, cam = {convertScreenCoordsToWorld3D(sw / 2, sh / 2, 700.0)}, {getActiveCameraCoordinates()}
-			local res, c = processLineOfSight(cam[1], cam[2], cam[3], pos[1], pos[2], pos[3], false, true, true, false, false, false, false, false)
+			-- local res, c = processLineOfSight(cam[1], cam[2], cam[3], pos[1], pos[2], pos[3], false, true, true, false, false, false, false, false)
+			local lres, res, c = copcall(processLineOfSight, cam[1], cam[2], cam[3], pos[1], pos[2], pos[3], false, true, true, false, false, false, false, false)
 
-			if res and (c.entityType == 2 or c.entityType == 3) and storeCarCharIsInNoSave(PLAYER_PED) ~= getVehiclePointerHandle(c.entity) and getCharPointerHandle(c.entity) ~= PLAYER_PED then
+			if lres and res and (c.entityType == 2 or c.entityType == 3) and (c.entityType == 2 and storeCarCharIsInNoSave(PLAYER_PED) ~= getVehiclePointerHandle(c.entity) or true) and (c.entityType == 3 and getCharPointerHandle(c.entity) ~= PLAYER_PED or true) then
 
 					sight_posX, sight_posY, sight_posZ = c.pos[1], c.pos[2], c.pos[3]
 
@@ -1490,7 +1566,7 @@ function compass()
 
 			for i = yaw - 120, yaw + 120 do
 				local y = i if i >= 180 then y = -360 + i elseif i <= -180 then y = 360 + i end
-				finalText = (compassText[y] and compassText[y]..finalText) or " "..finalText
+				finalText = ((config.MAIN.language.compass == "RU" and compassTextRU[y] or compassTextEN[y]) and (config.MAIN.language.compass == "RU" and compassTextRU[y] or compassTextEN[y])..finalText) or " "..finalText
 			end
 			local number = 0
 			for k, v in ipairs(split(finalText, ' '), true) do
