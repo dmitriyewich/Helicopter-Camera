@@ -2,8 +2,8 @@ script_name('Helicopter-Camera')
 script_author('dmitriyewich, https://vk.com/dmitriyewichmods')
 script_dependencies("mimgui", "sampfuncs")
 script_properties('work-in-pause')
-script_version("1.0")
-script_version_number(100)
+script_version("1.5")
+script_version_number(150)
 
 local script = thisScript()
 require"lib.moonloader"
@@ -17,6 +17,102 @@ local new, str, sizeof = imgui.new, ffi.string, ffi.sizeof
 local lencoding, encoding = pcall(require, 'encoding')
 encoding.default = 'CP1251'
 u8 = encoding.UTF8
+
+-- AUTHOR main hooks lib: RTD/RutreD(https://www.blast.hk/members/126461/)
+ffi.cdef[[
+    int VirtualProtect(void* lpAddress, unsigned long dwSize, unsigned long flNewProtect, unsigned long* lpflOldProtect);
+    void* VirtualAlloc(void* lpAddress, unsigned long dwSize, unsigned long  flAllocationType, unsigned long flProtect);
+    int VirtualFree(void* lpAddress, unsigned long dwSize, unsigned long dwFreeType);
+]]
+local function copy(dst, src, len)
+    return ffi.copy(ffi.cast('void*', dst), ffi.cast('const void*', src), len)
+end
+local buff = {free = {}}
+local function VirtualProtect(lpAddress, dwSize, flNewProtect, lpflOldProtect)
+    return ffi.C.VirtualProtect(ffi.cast('void*', lpAddress), dwSize, flNewProtect, lpflOldProtect)
+end
+local function VirtualAlloc(lpAddress, dwSize, flAllocationType, flProtect, blFree)
+    local alloc = ffi.C.VirtualAlloc(lpAddress, dwSize, flAllocationType, flProtect)
+    if blFree then
+        table.insert(buff.free, function()
+            ffi.C.VirtualFree(alloc, 0, 0x8000)
+        end)
+    end
+    return ffi.cast('intptr_t', alloc)
+end
+--JMP HOOKS
+local jmp_hook = {hooks = {}}
+function jmp_hook.new(cast, callback, hook_addr, size, trampoline, org_bytes_tramp)
+    jit.off(callback, true) --off jit compilation | thx FYP
+    local size = size or 5
+    local trampoline = trampoline or false
+    local new_hook, mt = {}, {}
+    local detour_addr = tonumber(ffi.cast('intptr_t', ffi.cast(cast, callback)))
+    local old_prot = ffi.new('unsigned long[1]')
+    local org_bytes = ffi.new('uint8_t[?]', size)
+    copy(org_bytes, hook_addr, size)
+    if trampoline then
+        local alloc_addr = VirtualAlloc(nil, size + 5, 0x1000, 0x40, true)
+        local trampoline_bytes = ffi.new('uint8_t[?]', size + 5, 0x90)
+        if org_bytes_tramp then
+            local i = 0
+            for byte in org_bytes_tramp:gmatch('(%x%x)') do
+                trampoline_bytes[i] = tonumber(byte, 16)
+                i = i + 1
+            end
+        else
+            copy(trampoline_bytes, org_bytes, size)
+        end
+        trampoline_bytes[size] = 0xE9
+        ffi.cast('int32_t*', trampoline_bytes + size + 1)[0] = hook_addr - tonumber(alloc_addr) - size + (size - 5)
+        copy(alloc_addr, trampoline_bytes, size + 5)
+        new_hook.call = ffi.cast(cast, alloc_addr)
+        mt = {__call = function(self, ...)
+            return self.call(...)
+        end}
+    else
+        new_hook.call = ffi.cast(cast, hook_addr)
+        mt = {__call = function(self, ...)
+            self.stop()
+            local res = self.call(...)
+            self.start()
+            return res
+        end}
+    end
+    local hook_bytes = ffi.new('uint8_t[?]', size, 0x90)
+    hook_bytes[0] = 0xE9
+    ffi.cast('int32_t*', hook_bytes + 1)[0] = detour_addr - hook_addr - 5
+    new_hook.status = false
+    local function set_status(bool)
+        new_hook.status = bool
+        VirtualProtect(hook_addr, size, 0x40, old_prot)
+        copy(hook_addr, bool and hook_bytes or org_bytes, size)
+        VirtualProtect(hook_addr, size, old_prot[0], old_prot)
+    end
+    new_hook.stop = function() set_status(false) end
+    new_hook.start = function() set_status(true) end
+    new_hook.start()
+    if org_bytes[0] == 0xE9 or org_bytes[0] == 0xE8 then
+        print('[WARNING] rewrote another hook'.. (trampoline and ' (old hook was disabled, through trampoline)' or ''))
+    end
+    table.insert(jmp_hook.hooks, new_hook)
+    return setmetatable(new_hook, mt)
+end
+--JMP HOOKS
+--DELETE HOOKS
+addEventHandler('onScriptTerminate', function(scr)
+    if scr == script.this then
+        for i, hook in ipairs(jmp_hook.hooks) do
+            if hook.status then
+                hook.stop()
+            end
+        end
+        for i, free in ipairs(buff.free) do
+            free()
+        end
+    end
+end)
+--DELETE HOOKS
 
 local function isarray(t, emptyIsObject) -- by Phrogz, сортировка
 	if type(t)~='table' then return false end
@@ -222,7 +318,7 @@ function convertTableToJsonString(config)
 end
 
 function zone()
-	zone = {{"Ависпа", "Avispa Country Club", -2667.810, -302.135, -28.831, -2646.400, -262.320, 71.169}, {"Международный Аэропорт Истер Бей", "Easter Bay Airport", -1315.420, -405.388, 15.406, -1264.400, -209.543, 25.406}, {"Ависпа", "Avispa Country Club", -2550.040, -355.493, 0.000, -2470.040, -318.493, 39.700},
+	local zone = {{"Ависпа", "Avispa Country Club", -2667.810, -302.135, -28.831, -2646.400, -262.320, 71.169}, {"Международный Аэропорт Истер Бей", "Easter Bay Airport", -1315.420, -405.388, 15.406, -1264.400, -209.543, 25.406}, {"Ависпа", "Avispa Country Club", -2550.040, -355.493, 0.000, -2470.040, -318.493, 39.700},
 	 {"Международный Аэропорт Истер Бей", "Easter Bay Airport", -1490.330, -209.543, 15.406, -1264.400, -148.388, 25.406}, {"Гарсия", "Garcia", -2395.140, -222.589, -5.3, -2354.090, -204.792, 200.000}, {"Сшэйди Кэйбин", "Shady Cabin", -1632.830, -2263.440, -3.0, -1601.330, -2231.790, 200.000},
 	 {"Ист Лос Сантос", "East Los Santos", 2381.680, -1494.030, -89.084, 2421.030, -1454.350, 110.916}, {"Лва Фрейт Депо", "LVA Freight Depot", 1236.630, 1163.410, -89.084, 1277.050, 1203.280, 110.916}, {"Пилсон Интерсекшон", "Blackfield Intersection", 1277.050, 1044.690, -89.084, 1315.350, 1087.630, 110.916}, {"Ависпа", "Avispa Country Club", -2470.040, -355.493, 0.000, -2270.040, -318.493, 46.100}, {"Темпл", "Temple", 1252.330, -926.999, -89.084, 1357.000, -910.170, 110.916},
 	 {"Юнити Стейшен", "Unity Station", 1692.620, -1971.800, -20.492, 1812.620, -1932.800, 79.508}, {"Лва Фрейт Депо", "LVA Freight Depot", 1315.350, 1044.690, -89.084, 1375.600, 1087.630, 110.916},
@@ -310,7 +406,10 @@ local config = {}
 
 function defalut_config()
 	config = {
-		["MAIN"] = {["heli_camera"] = {['z'] = 0.5}, ['cmd'] = 'BC', ["language"] = "RU"},
+		["MAIN"] = {["heli_camera"] = {['z'] = 0.5}, ['cmd'] = 'BC', ["language"] = "RU",
+				["zones"] = {['size'] = 0.0, ['dist'] = 1000},
+				["light"] = {['multiplier'] = 4, ['auto'] = true, ['size'] = 5, ['intensity'] = 255},
+				["vehicle"] = {[497] = 497}},
 		["pos"] = {["info"] = {['x'] = 313, ['y'] = 310},
 			["zoom"] = {['x'] = 67, ['y'] = 224},
 			["compass_text"] = {['x'] = 320.5, ['y'] = 23},
@@ -341,18 +440,34 @@ else
 	defalut_config()
 end
 
--- local blur = ffi.cast("void (*)(float)", 0x7030A0)
-
-function onD3DPresent()
-    if draw then
-        callFunction(0x007037C0, 2, 2, 0x40, 1)
-    end
-end
+local blur = ffi.cast("void (*)(float)", 0x7030A0)
 
 local active, angY = false, 0.0
 local text_target = "NO TARGET"
 local handle, name_model, id_model, sight_posX, sight_posY, sight_posZ, handle_fixview, who = -1, '', -1,  0, 0, 0, -1, 0
 local light_active, zone_active, active_fixview = false, false, false
+local test_fov = 70
+
+function mod(a, b)
+    return a - (math.floor(a/b)*b)
+end
+
+function DEC_HEX(IN)
+    local B,K,OUT,I,D=16,"0123456789ABCDEF","",0
+    while IN>0 do
+        I=I+1
+        IN,D=math.floor(IN/B), mod(IN,B)+1
+        OUT=string.sub(K,D,D)..OUT
+    end
+    return tonumber(OUT, 16)
+end
+
+function onD3DPresent()
+    if draw then
+        callFunction(0x007037C0, 2, 2, 0x30 + DEC_HEX(test_fov), 1)
+		-- blur(test_fov/100)
+    end
+end
 
 function CarModel(x)
 	local cars = {
@@ -429,7 +544,6 @@ function NameModel(x)
     return 'None'
 end
 
-
 function setText(key, string, posX, posY, sX, sY, font, align, ARGB, sO, sARGB, wrapx, centresize, background, proportional, drawbeforefade)
 	local a, sA = bit.band(bit.rshift(ARGB, 24), 0xFF), bit.band(bit.rshift(sARGB, 24), 0xFF)
 	local r, sR = bit.band(bit.rshift(ARGB, 16), 0xFF), bit.band(bit.rshift(sARGB, 16), 0xFF)
@@ -462,18 +576,14 @@ function setText(key, string, posX, posY, sX, sY, font, align, ARGB, sO, sARGB, 
 end
 
 function loadTextures(txd, names)
-  if not loadTextureDictionary(txd) then
-		return nil
-	end
+  if not loadTextureDictionary(txd) then return nil end
 
-  local textures = {}
-  local count = 0
+  local textures, count = {}, 0
   for _, name in ipairs(names) do
     local id = loadSprite(name)
     table.insert(textures, {weapon = name, sprite = id})
     count = count + 1
   end
-
   return textures
 end
 
@@ -500,8 +610,9 @@ end
 
 if limgui then
 	window = new.bool(false)
-	cmdbuffer =  imgui.new.char[128](config.MAIN.cmd)
+	cmdbuffer =  new.char[128](config.MAIN.cmd)
 	sizeX, sizeY = getScreenResolution()
+
 
 	local qweeqe = config.MAIN.language == "RU" and 1 or 2
 	table.sort(config.zones, function(a,b) return a[qweeqe] < b[qweeqe] end)
@@ -520,6 +631,12 @@ if limgui then
 		pos_new[k] = {new.float(config.pos[k].x), new.float(config.pos[k].y)}
 	end
 
+	local zones_size, zones_dist = new.float(config.MAIN.zones.size), new.float(config.MAIN.zones.dist)
+
+	local checkbox_light_auto = new.bool(config.MAIN.light.auto)
+	local light_size, light_intensity, light_multiplier = new.float(config.MAIN.light.size), new.float(config.MAIN.light.intensity), new.float(config.MAIN.light.multiplier)
+
+	local add_veh = new.char[256]()
 
 	function Standart()
 		imgui.SwitchContext()
@@ -604,7 +721,6 @@ if limgui then
 		colors[clr.ModalWindowDimBg] = ImVec4(1.00, 0.00, 0.00, 0.0)
 	end
 
-
 	imgui.OnInitialize(function()
 		Standart()
 		imgui.GetIO().IniFilename = nil
@@ -683,7 +799,7 @@ if limgui then
 						if config.zones[i][3] ~= nil and isPointOnScreen(config.zones[i][3], config.zones[i][4], config.zones[i][5], 0.5) then
 							local result, xx, yy, zz, _, _ = convert3DCoordsToScreenEx(config.zones[i][3], config.zones[i][4], config.zones[i][5], true, true)
 							if result then
-								setText(zones_text[i], RusToGame(u8:decode(config.zones[i][config.MAIN.language == "RU" and 1 or 2])), convertW(xx).x, convertW(yy).y, 0.2, 1.1, 2, 2, '0xFFFF0000', 0.5, 0x15FF0000, 500, 500, false, true, true)
+								setText(zones_text[i], RusToGame(u8:decode(config.zones[i][config.MAIN.language == "RU" and 1 or 2])), convertW(xx).x, convertW(yy).y, config.MAIN.zones.size+0.2, (config.MAIN.zones.size*4)+1.1, 2, 2, '0xFFFF0000', 0.5, 0x15FF0000, 500, 500, false, true, true)
 							end
 						end
 					end
@@ -697,7 +813,7 @@ if limgui then
 						if config.zones[i][3] ~= nil and isPointOnScreen(config.zones[i][3], config.zones[i][4], config.zones[i][5], 0.5) then
 							local result, xx, yy, zz, _, _ = convert3DCoordsToScreenEx(config.zones[i][3], config.zones[i][4], config.zones[i][5], true, true)
 							if result then
-								setText(zones_text[i], RusToGame(u8:decode(config.zones[i][config.MAIN.language == "RU" and 1 or 2])), convertW(xx).x, convertW(yy).y, 0.2, 1.1, 2, 2, '0xFFFF0000', 0.5, 0x15FF0000, 500, 500, false, true, true)
+								setText(zones_text[i], RusToGame(u8:decode(config.zones[i][config.MAIN.language == "RU" and 1 or 2])), convertW(xx).x, convertW(yy).y, config.MAIN.zones.size+0.2, (config.MAIN.zones.size*4)+1.1, 2, 2, '0xFFFF0000', 0.5, 0x15FF0000, 500, 500, false, true, true)
 							end
 						end
 						imgui.PushItemWidth(174)
@@ -841,6 +957,66 @@ if limgui then
 				end
 
 			end
+
+			imgui.Separator()
+
+			if imgui.CollapsingHeader('Прочее') then
+				imgui.PushItemWidth(150)
+				if imgui.SliderFloat("Размер шрифта районов##zones_size", zones_size, -0.2, 0.2) then
+					config.MAIN.zones.size = zones_size[0]
+				end
+				if imgui.SliderFloat("Дистанция прорисовки районов##light_size", zones_dist, 0, 3600) then
+					config.MAIN.zones.dist = zones_dist[0]
+				end
+				if imgui.Checkbox("Размер фонарика подбирается сам##light_sizeauto", checkbox_light_auto) then
+					config.MAIN.light.auto = not config.MAIN.light.auto
+				end
+				if checkbox_light_auto[0] then
+					if imgui.SliderFloat("Множитель для авторазмера##light_multiplier", light_multiplier, 0.5, 8) then
+						config.MAIN.light.multiplier = light_multiplier[0]
+					end
+				else
+					if imgui.SliderFloat("Размер фонарика##light_size", light_size, 0, 47) then
+						config.MAIN.light.size = light_size[0]
+					end
+				end
+				if imgui.SliderFloat("Интенсивность фонарика##light_intensity", light_intensity, 0, 255) then
+					config.MAIN.light.intensity = light_intensity[0]
+				end
+				imgui.PopItemWidth()
+
+				imgui.Separator()
+
+				if imgui.TreeNodeStr('Список доступного камере транспорта') then
+					imgui.PushItemWidth(74)
+					imgui.InputText("Введите ID model  ##InputTextAddveh", add_veh, sizeof(add_veh)-1, imgui.InputTextFlags.CharsDecimal + imgui.InputTextFlags.AutoSelectAll)
+					imgui.SameLine()
+					if imgui.Button('Добавить##Addvehbutton', imgui.ImVec2(0, 0)) then
+						config.MAIN.vehicle[tonumber(str(add_veh))] = tonumber(str(add_veh))
+					end
+					imgui.PopItemWidth()
+
+					for k, v in pairs(config.MAIN.vehicle) do
+						imgui.Text(string.format("%s(%s)", v, CarModel(v)))
+						if imgui.IsItemClicked(1) then
+							config.MAIN.vehicle[k] = nil
+						end
+					end
+					imgui.SetCursorPosX((imgui.GetWindowWidth() - imgui.CalcTextSize('ПКМ - удалить').x) / 2)
+						imgui.Text("ПКМ - удалить")
+					imgui.TreePop()
+				end
+
+				imgui.Separator()
+
+				imgui.SetCursorPosX((imgui.GetWindowWidth() - 176) / 2)
+				if imgui.Button('Сохранить##otherbutton4', imgui.ImVec2(174, 0)) then
+					savejson(convertTableToJsonString(config), "moonloader/Helicopter-Camera/Helicopter-Camera.json")
+				end
+			end
+
+			imgui.Separator()
+
 		imgui.End()
 	end)
 
@@ -911,6 +1087,27 @@ if limgui then
 
 end
 
+function AddHeliSearchLight(origin, target, targetRadius, power, coronaIndex, unknownFlag, drawShadow)
+	if active and sx >= 0 and sy >= 0 and sx < sw and sy < sh then
+	local px, py, pz = getActiveCameraPointAt()
+	local posX1, posY1, posZ1 = convertScreenCoordsToWorld3D(sw/2, sh/2, 700.0)
+	local result, colpoint = processLineOfSight(px, py, pz-1, posX1, posY1, posZ1, true, false, false, true, false, false, false)
+	if result and colpoint.entity ~= 0 then
+		local normal = colpoint.normal
+		local pos = Vector3D(colpoint.pos[1], colpoint.pos[2], colpoint.pos[3]) - (Vector3D(normal[1], normal[2], normal[3]) * 0.1)
+		local zOffset = 300
+		if normal[3] >= 0.5 then zOffset = 1 end
+		local result, colpoint2 = processLineOfSight(pos.x, pos.y, pos.z + zOffset, pos.x, pos.y, pos.z - 0.3,
+		true, false, false, true, false, false, false)
+		if result then
+			pos = Vector3D(colpoint2.pos[1], colpoint2.pos[2], colpoint2.pos[3] + 1)
+			target = ffi.new("float[3]", pos.x, pos.y, pos.z+1)
+			end
+		end
+	end
+	AddHeliSearchLight(origin, target, targetRadius, power, coronaIndex, unknownFlag, drawShadow)
+end
+
 function main()
 
 	repeat wait(0) until memory.read(0xC8D4C0, 4, false) == 9
@@ -921,6 +1118,11 @@ function main()
 	if not loadTexturesTXD() then return end
 
 	standard_fov = getCameraFov()
+	
+	sw, sh = getScreenResolution()
+	sx, sy = memory.getfloat(0xB6EC14) * sw, memory.getfloat(0xB6EC10) * sh
+
+	AddHeliSearchLight = jmp_hook.new("void(__cdecl *)(const float*, const float*, float targetRadius, float power, unsigned int coronaIndex, unsigned char unknownFlag, unsigned char drawShadow)", AddHeliSearchLight, 0x6C45B0)
 
 	sampRegisterChatCommand('helicam', function()
 		if limgui then
@@ -930,9 +1132,6 @@ function main()
 			print('Download: https://github.com/THE-FYP/mimgui ')
 		end
 	end)
-
-	sw, sh = getScreenResolution()
-	sx, sy = memory.getfloat(0xB6EC14) * sw, memory.getfloat(0xB6EC10) * sh
 
 	lua_thread.create(compass)
 	lua_thread.create(camhack)
@@ -978,8 +1177,11 @@ function light_thread()
 				true, false, false, true, false, false, false)
 				if result then
 					pos = Vector3D(colpoint2.pos[1], colpoint2.pos[2], colpoint2.pos[3] + 1)
-					drawShadow(3, pos.x, pos.y, pos.z, 0.0, 5, 1.5, 200, 200, 200)
-					drawLightWithRange(pos.x, pos.y, pos.z+5, 255, 255, 255, 10)
+
+					local GroundZ = getGroundZFor3dCoord(pos.x, pos.y, pos.z)
+					drawShadow(3, pos.x, pos.y, pos.z, 0.0, config.MAIN.light.auto and ((pz - GroundZ) / config.MAIN.light.multiplier) or config.MAIN.light.size , 15, config.MAIN.light.intensity, config.MAIN.light.intensity, config.MAIN.light.intensity)
+
+					drawLightWithRange(pos.x, pos.y, pos.z+5, 255, 255, 255, 15)
 					end
 				end
 			end
@@ -997,12 +1199,13 @@ function zones_thread()
 			local tbl_zone = config.zones
 				for i = 1, #tbl_zone do
 					local x, y, z = tbl_zone[i][3], tbl_zone[i][4], tbl_zone[i][5]
-
-					if isPointOnScreen(x, y, z, 0.5) then
+					local posX, posY, posZ = getCarModelCornersIn2d(getCarModel(storeCarCharIsInNoSave(PLAYER_PED)), storeCarCharIsInNoSave(PLAYER_PED))
+					local dist = getDistanceBetweenCoords3d(posX, posY, posZ, x, y, z)
+					if dist <= config.MAIN.zones.dist and isPointOnScreen(x, y, z, 0.5) then
 						local result, xx, yy, zz, _, _ = convert3DCoordsToScreenEx(x, y, z, true, true)
 						local GroundZ = getGroundZFor3dCoord(x, y, z)
 						if result then
-							setText(zones_text[i], RusToGame(u8:decode(tbl_zone[i][config.MAIN.language == "RU" and 1 or 2])), convertW(xx).x, convertW(yy).y, 0.2, 1.1, 2, 2, '0xFFFFFFFF', 0.5, 0x15000000, 500, 500, false, true, true)
+							setText(zones_text[i], RusToGame(u8:decode(tbl_zone[i][config.MAIN.language == "RU" and 1 or 2])), convertW(xx).x, convertW(yy).y, config.MAIN.zones.size+0.2, (config.MAIN.zones.size*4)+1.1, 2, 2, '0xFFFFFFFF', 0.5, 0x15000000, 500, 500, false, true, true)
 						end
 					end
 				end
@@ -1011,47 +1214,40 @@ function zones_thread()
 	end
 end
 
-
-function licenseplates(id)
-	local vehpool = sampGetVehiclePoolPtr()
-	if getStructElement(vehpool, 0x3074 + id * 4, 1) == 1 then
-		local veh_true = getStructElement(vehpool, 0x1134 + id * 4, 4)
-		local license_plates = memory.tostring(veh_true + 0x93, 32, false)
-		return u8:decode(license_plates)
-	end
-	return 'NO DATA'
+function licenseplates(p)
+    return memory.tostring(memory.getint32(memory.getint32(memory.getint32(memory.getint32(getModuleHandle('samp.dll') + 0x21A0F8, false) + 0x3CD, false) + 0x1C, false) + 0x1134 + p * 4, false) + 0x93, 32, false)
 end
 
 function car()
 	while true do wait(0)
 		if active then
-				sight_posX, sight_posY, sight_posZ = 0, 0, 0
-				local pos, cam = {convertScreenCoordsToWorld3D(sw / 2, sh / 2, 700.0)}, {getActiveCameraCoordinates()}
-				local res, c = processLineOfSight(cam[1], cam[2], cam[3], pos[1], pos[2], pos[3], false, true, true, false, false, false, false, false)
+			sight_posX, sight_posY, sight_posZ = 0, 0, 0
+			local pos, cam = {convertScreenCoordsToWorld3D(sw / 2, sh / 2, 700.0)}, {getActiveCameraCoordinates()}
+			local res, c = processLineOfSight(cam[1], cam[2], cam[3], pos[1], pos[2], pos[3], false, true, true, false, false, false, false, false)
 
-				if res and (c.entityType == 2 or c.entityType == 3) and storeCarCharIsInNoSave(PLAYER_PED) ~= getVehiclePointerHandle(c.entity) and getCharPointerHandle(c.entity) ~= PLAYER_PED then
+			if res and (c.entityType == 2 or c.entityType == 3) and storeCarCharIsInNoSave(PLAYER_PED) ~= getVehiclePointerHandle(c.entity) and getCharPointerHandle(c.entity) ~= PLAYER_PED then
 
-						sight_posX, sight_posY, sight_posZ = c.pos[1], c.pos[2], c.pos[3]
+					sight_posX, sight_posY, sight_posZ = c.pos[1], c.pos[2], c.pos[3]
 
-						handle = c.entityType == 2 and getVehiclePointerHandle(c.entity) or getCharPointerHandle(c.entity)
+					handle = c.entityType == 2 and getVehiclePointerHandle(c.entity) or getCharPointerHandle(c.entity)
 
-						id_model = c.entityType == 2 and getCarModel(handle) or getCharModel(handle)
+					id_model = c.entityType == 2 and getCarModel(handle) or getCharModel(handle)
 
-						name_model = c.entityType == 2 and CarModel(id_model) or NameModel(id_model)
+					name_model = c.entityType == 2 and CarModel(id_model) or NameModel(id_model)
 
-						local draw = c.entityType == 2 and {getCarCoordinates(handle)} or {getCharCoordinates(handle)}
+					local draw = c.entityType == 2 and {getCarCoordinates(handle)} or {getCharCoordinates(handle)}
 
-						local wposX, wposY = convert3DCoordsToScreen(draw[1], draw[2], draw[3])
-						drawIcon(1, 2, convertW(wposX).x, convertW(wposY).y, 42, 50, 0xDAFAFAFA)
+					local wposX, wposY = convert3DCoordsToScreen(draw[1], draw[2], draw[3])
+					drawIcon(1, 2, convertW(wposX).x, convertW(wposY).y, 42, 50, 0xDAFAFAFA)
 
-						id_nickname = c.entityType == 2 and select(2, sampGetPlayerIdByCharHandle(getDriverOfCar(handle))) or select(2, sampGetPlayerIdByCharHandle(handle))
+					id_nickname = c.entityType == 2 and select(2, sampGetPlayerIdByCharHandle(getDriverOfCar(handle))) or select(2, sampGetPlayerIdByCharHandle(handle))
 
-						id_car = c.entityType == 2 and select(2, sampGetVehicleIdByCarHandle(handle)) or -1
+					id_car = c.entityType == 2 and select(2, sampGetVehicleIdByCarHandle(handle)) or -1
 
-						text_target = c.entityType == 2 and "ON VEHICLE" or "ON HUMAN"
-				else
-					text_target = "NO TARGET"
-				end
+					text_target = c.entityType == 2 and "ON VEHICLE" or "ON HUMAN"
+			else
+				text_target = "NO TARGET"
+			end
 
 			if isKeyJustPressed(isKeys(config.keybind.active_fixview)) then
 				if (text_target == "ON VEHICLE" or text_target == "ON HUMAN") then
@@ -1080,7 +1276,7 @@ function car()
 						active_fixview = false
 						while true do wait(0)
 							drawIcon(1, 3, 328, 338, 35, 40, 0xDAFAFAFA)
-							setText(test_text3[1], RusToGame(u8:decode('~r~NO CONNECTION')), 343, 334, 0.2, 1.1, 2, 1, '0xFFFFFFFF', 0.5, 0x15000000, 500, 500, false, true, true)
+							setText(test_text3[1], RusToGame(u8:decode('~r~CONNECTION LOST')), 343, 334, 0.2, 1.1, 2, 1, '0xFFFFFFFF', 0.5, 0x15000000, 500, 500, false, true, true)
 							if os.clock() - timer > 2 or active_fixview then break end
 						end
 					end)
@@ -1111,180 +1307,180 @@ end
 function camhack()
     local flymode, fov, radarHud, keyPressed, speed = 0, 70, 1, 0, 15.0
     while true do wait(0)
-			local pStSet = sampGetServerSettingsPtr()
-			if isCharInAnyCar(PLAYER_PED) and getCarModel(storeCarCharIsInNoSave(PLAYER_PED)) == 497 then
-				local posX, posY, posZ = getCarModelCornersIn2d(getCarModel(storeCarCharIsInNoSave(PLAYER_PED)), storeCarCharIsInNoSave(PLAYER_PED))
-				posZ = posZ + config.MAIN.heli_camera.z
-				if not active and testCheat(config.MAIN.cmd) then
-					active, draw = true, true
-					if flymode == 0 and active then
-						angZ = getCharHeading(playerPed)
-						angZ = angZ * -1.0
-						setFixedCameraPosition(posX, posY, posZ, 0.0, 0.0, 0.0)
-						angY = 0.0
-						flymode = 1
-					end
-				end
-
-				if flymode == 1 then
+		test_fov = -(fov + 80 - (200))
+		local pStSet = sampGetServerSettingsPtr()
+		if isCharInAnyCar(PLAYER_PED) and config.MAIN.vehicle[tostring(getCarModel(storeCarCharIsInNoSave(PLAYER_PED)))] ~= nil then
+			local posX, posY, posZ = getCarModelCornersIn2d(getCarModel(storeCarCharIsInNoSave(PLAYER_PED)), storeCarCharIsInNoSave(PLAYER_PED))
+			posZ = posZ + config.MAIN.heli_camera.z
+			if not active and testCheat(config.MAIN.cmd) then
+				active, draw = true, true
+				if flymode == 0 and active then
+					angZ = getCharHeading(playerPed)
+					angZ = angZ * -1.0
 					setFixedCameraPosition(posX, posY, posZ, 0.0, 0.0, 0.0)
-					if isKeyJustPressed(isKeys(config.keybind.draw_noise)) then
-						draw = not draw
-						infvi, nightvi = false, false
-						setNightVision(false)
-						setInfraredVision(false)
+					angY = 0.0
+					flymode = 1
+				end
+			end
+
+			if flymode == 1 then
+				setFixedCameraPosition(posX, posY, posZ, 0.0, 0.0, 0.0)
+				if isKeyJustPressed(isKeys(config.keybind.draw_noise)) then
+					draw = not draw
+					infvi, nightvi = false, false
+					setNightVision(false)
+					setInfraredVision(false)
+				end
+				if isKeyJustPressed(isKeys(config.keybind.nightvi)) then
+					nightvi = not nightvi
+					infvi  = false
+					setNightVision(nightvi)
+					setInfraredVision(false)
+				end
+				if isKeyJustPressed(isKeys(config.keybind.infvi)) then
+					infvi = not infvi
+					nightvi = false
+					setNightVision(false)
+					setInfraredVision(infvi)
+				end
+
+				if isKeyDown(isKeys(config.keybind.sens_plus)) then
+					speed = speed + 5.0
+					printStringNow(speed, 1000)
+				end
+
+				if isKeyDown(isKeys(config.keybind.sens_minus)) then
+					speed = speed - 5.0
+					if speed <= 10.00 then
+						speed = 10.00
 					end
-					if isKeyJustPressed(isKeys(config.keybind.nightvi)) then
-						nightvi = not nightvi
-						infvi  = false
-						setNightVision(nightvi)
-						setInfraredVision(false)
+					printStringNow(speed, 1000)
+				end
+
+				local delta = getMousewheelDelta()
+				if not isKeyDown(isKeys(config.keybind.zoom)) then delta = delta else delta = delta * 5 end
+				fov = fov - delta
+
+				if fov >= 100 then fov = 100 end
+				if fov <= 20 then fov = 20 end
+				cameraSetLerpFov( fov,  fov, 700, true)
+
+				drawIcon(1, 10, config.pos.zoom.x, config.pos.zoom.y, 76, 10, 0xFAFAFAFA)
+				drawIcon(1, 7, config.pos.zoom.x+49-((81 * fov) / 100), config.pos.zoom.y, 8, 8, 0xFAFAFAFA)
+				setText(test_text3[2], RusToGame(u8:decode('Zoom: '..fov..' Sensitivity: '..speed)), config.pos.zoom.x, config.pos.zoom.y+3, 0.13, 1.0, 2, 2, '0xFFFFFFFF', 0.5, 0x15000000, 255, 500, false, true, true)
+
+
+				if active_fixview then
+					local cx, cy, _ = getActiveCameraCoordinates()
+					local px, py, _ = getActiveCameraPointAt()
+					angZ = math.atan2( (px-cx), (py-cy) ) * 180 / math.pi
+					if angZ <= 0 then angZ = 360 + angZ elseif angZ >= 0 then angZ = angZ end
+
+					local positionX, positionY, positionZ
+					if who == 2 then
+						positionX, positionY, positionZ = getCarCoordinates(handle_fixview)
+					elseif who == 3 then
+						positionX, positionY, positionZ = getCharCoordinates(handle_fixview)
 					end
-					if isKeyJustPressed(isKeys(config.keybind.infvi)) then
-						infvi = not infvi
-						nightvi = false
-						setNightVision(false)
-						setInfraredVision(infvi)
-					end
+					angY = angleZ_test(positionX, positionY, positionZ)
+					angY = -angY
+				end
 
-					if isKeyDown(isKeys(config.keybind.sens_plus)) then
-						speed = speed + 5.0
-						printStringNow(speed, 1000)
-					end
+				if not active_fixview then
+					offMouX, offMouY = getPcMouseMovement()
 
-					if isKeyDown(isKeys(config.keybind.sens_minus)) then
-						speed = speed - 5.0
-						if speed <= 10.00 then
-							speed = 10.00
-						end
-						printStringNow(speed, 1000)
-					end
+					offMouX = offMouX / speed
+					offMouY = offMouY / speed
+					angZ = angZ + offMouX
+					angY = angY + offMouY
 
-					local delta = getMousewheelDelta()
-					if not isKeyDown(isKeys(config.keybind.zoom)) then delta = delta else delta = delta * 5 end
-					fov = fov - delta
+					if angZ > 360.0 then angZ = angZ - 360.0 end
+					if angZ < 0.0 then angZ = angZ + 360.0 end
 
-					if fov >= 100 then fov = 100 end
-					if fov <= 20 then fov = 20 end
-					cameraSetLerpFov( fov,  fov, 700, true)
+					if angY >= 4.7 then angY = 4.7 end
+					if angY < -89.0 then angY = -89.0 end
 
-					drawIcon(1, 10, config.pos.zoom.x, config.pos.zoom.y, 76, 10, 0xFAFAFAFA)
-					drawIcon(1, 7, config.pos.zoom.x+49-((81 * fov) / 100), config.pos.zoom.y, 8, 8, 0xFAFAFAFA)
-					setText(test_text3[2], RusToGame(u8:decode('Zoom: '..fov..' Sensitivity: '..speed)), config.pos.zoom.x, config.pos.zoom.y+3, 0.13, 1.0, 2, 2, '0xFFFFFFFF', 0.5, 0x15000000, 255, 500, false, true, true)
+					radZ = math.rad(angZ)
+					radY = math.rad(angY)
+					sinZ = math.sin(radZ)
+					cosZ = math.cos(radZ)
+					sinY = math.sin(radY)
+					cosY = math.cos(radY)
+					sinZ = sinZ * cosY
+					cosZ = cosZ * cosY
+					sinZ = sinZ * 1.0
+					cosZ = cosZ * 1.0
+					sinY = sinY * 1.0
+					poiX = posX
+					poiY = posY
+					poiZ = posZ
+					poiX = poiX + sinZ
+					poiY = poiY + cosZ
+					poiZ = poiZ + sinY
+					pointCameraAtPoint(poiX, poiY, poiZ, 2)
+				end
 
-
-					if active_fixview then
-						local cx, cy, _ = getActiveCameraCoordinates()
-						local px, py, _ = getActiveCameraPointAt()
-						angZ = math.atan2( (px-cx), (py-cy) ) * 180 / math.pi
-						if angZ <= 0 then angZ = 360 + angZ elseif angZ >= 0 then angZ = angZ end
-
-						local positionX, positionY, positionZ
-						if who == 2 then
-							positionX, positionY, positionZ = getCarCoordinates(handle_fixview)
-						elseif who == 3 then
-							positionX, positionY, positionZ = getCharCoordinates(handle_fixview)
-						end
-						angY = angleZ_test(positionX, positionY, positionZ)
-						angY = -angY
-					end
-
-					if not active_fixview then
-						offMouX, offMouY = getPcMouseMovement()
-
-						offMouX = offMouX / speed
-						offMouY = offMouY / speed
-						angZ = angZ + offMouX
-						angY = angY + offMouY
-
-
-						if angZ > 360.0 then angZ = angZ - 360.0 end
-						if angZ < 0.0 then angZ = angZ + 360.0 end
-
-						if angY >= 4.7 then angY = 4.7 end
-						if angY < -89.0 then angY = -89.0 end
-
-						radZ = math.rad(angZ)
-						radY = math.rad(angY)
-						sinZ = math.sin(radZ)
-						cosZ = math.cos(radZ)
-						sinY = math.sin(radY)
-						cosY = math.cos(radY)
-						sinZ = sinZ * cosY
-						cosZ = cosZ * cosY
-						sinZ = sinZ * 1.0
-						cosZ = cosZ * 1.0
-						sinY = sinY * 1.0
-						poiX = posX
-						poiY = posY
-						poiZ = posZ
-						poiX = poiX + sinZ
-						poiY = poiY + cosZ
-						poiZ = poiZ + sinY
-						pointCameraAtPoint(poiX, poiY, poiZ, 2)
-					end
-
-					if keyPressed == 0 and isKeyDown(isKeys(config.keybind.hud)) then
-						keyPressed = 1
-						if radarHud == 0 then
-							displayHud(true)
-							radarHud = 1
-							memory.setint8(pStSet + 47, 1) -- показать хп
-							memory.setint8(pStSet + 56, 1) -- показать ник
-							sampSetChatDisplayMode(2)
-							memory.setuint8(sampGetBase() + 0x71480, 0x74, true)
-							memory.setint32(0xBA676C, 0) -- включить радар(для лаунчера аризоны)
-						else
-							displayHud(false)
-							radarHud = 0
-							memory.setint8(pStSet + 47, 0) -- скрыть хп
-							memory.setint8(pStSet + 56, 0)	-- скрыть ник
-							memory.setuint8(sampGetBase() + 0x71480, 0xEB, true)
-							memory.setint32(0xBA676C, 2) -- выключить радар(для лаунчера аризоны)
-							sampSetChatDisplayMode(0)
-						end
-					end
-
-					if wasKeyReleased(isKeys(config.keybind.hud)) and keyPressed == 1 then
-						keyPressed = 0
-					end
-
-					if active and testCheat(config.MAIN.cmd) then
-						active, draw, active_fixview, light_active, zone_active = false, false, false, false, false
-						if flymode == 1 and not active then
-							angPlZ = angZ * -1.0
-							restoreCameraJumpcut()
-							setCameraBehindPlayer()
-							setNightVision(false)
-							setInfraredVision(false)
-							cameraSetLerpFov( standard_fov,  standard_fov, 700, true)
-							flymode = 0
-							fov = standard_fov
-						end
+				if keyPressed == 0 and isKeyDown(isKeys(config.keybind.hud)) then
+					keyPressed = 1
+					if radarHud == 0 then
+						displayHud(true)
+						radarHud = 1
+						memory.setint8(pStSet + 47, 1) -- показать хп
+						memory.setint8(pStSet + 56, 1) -- показать ник
+						sampSetChatDisplayMode(2)
+						memory.setuint8(sampGetBase() + 0x71480, 0x74, true)
+						memory.setint32(0xBA676C, 0) -- включить радар(для лаунчера аризоны)
+					else
+						displayHud(false)
+						radarHud = 0
+						memory.setint8(pStSet + 47, 0) -- скрыть хп
+						memory.setint8(pStSet + 56, 0)	-- скрыть ник
+						memory.setuint8(sampGetBase() + 0x71480, 0xEB, true)
+						memory.setint32(0xBA676C, 2) -- выключить радар(для лаунчера аризоны)
+						sampSetChatDisplayMode(0)
 					end
 				end
-			else
-				if active then
+
+				if wasKeyReleased(isKeys(config.keybind.hud)) and keyPressed == 1 then
+					keyPressed = 0
+				end
+
+				if active and testCheat(config.MAIN.cmd) then
 					active, draw, active_fixview, light_active, zone_active = false, false, false, false, false
 					if flymode == 1 and not active then
 						angPlZ = angZ * -1.0
 						restoreCameraJumpcut()
 						setCameraBehindPlayer()
-						fov = standard_fov
-						flymode = 0
 						setNightVision(false)
 						setInfraredVision(false)
 						cameraSetLerpFov( standard_fov,  standard_fov, 700, true)
+						flymode = 0
+						fov = standard_fov
 					end
 				end
 			end
+		else
+			if active then
+				active, draw, active_fixview, light_active, zone_active = false, false, false, false, false
+				if flymode == 1 and not active then
+					angPlZ = angZ * -1.0
+					restoreCameraJumpcut()
+					setCameraBehindPlayer()
+					fov = standard_fov
+					flymode = 0
+					setNightVision(false)
+					setInfraredVision(false)
+					cameraSetLerpFov( standard_fov,  standard_fov, 700, true)
+				end
+			end
+		end
+
     end
 end
 
-
 function compass()
 	while true do wait(0)
-		if active and isCharInAnyCar(PLAYER_PED) and getCarModel(storeCarCharIsInNoSave(PLAYER_PED)) == 497 then
+		if active and isCharInAnyCar(PLAYER_PED) and config.MAIN.vehicle[tostring(getCarModel(storeCarCharIsInNoSave(PLAYER_PED)))] ~= nil then
 			local cx, cy, _ = getActiveCameraCoordinates()
 			local px, py, _ = getActiveCameraPointAt()
 			local camDirection = math.round((math.atan2( (px-cx), (py-cy) ) * 180 / math.pi), 0)
@@ -1319,7 +1515,6 @@ function compass()
 			drawIcon(2, 1, config.pos.heli.x-0.7, config.pos.heli.y-19, -44, -58, 0xFaFFFFFF, ang_vheli + camDirection)
 			setText(test_text3[3], math.round(ang_vheli, 0)..'~n~'..(tostring(-camDirection)):gsub('-', ''), config.pos.heli.x+0.5, config.pos.heli.y-22, 0.14, 0.95, 2, 2, '0xFFFFFFFF', 0, 0xFF608453, 255, 500, false, true, true)
 
-
 			drawIcon(1, 8, config.pos.camera.x, config.pos.camera.y, 25, 32, 0xFaFFFFFF)
 			drawIcon(2, 1, config.pos.camera.x, config.pos.camera.y+3, -26, -53, 0xFaFFFFFF, 90-angY)
 			setText(test_text3[4], (tostring(math.round(angY, 0))):gsub('-', ''), config.pos.camera.x+7, config.pos.camera.y-5, 0.14, 0.95, 2, 2, '0xFFFFFFFF', 0, 0xFF608453, 255, 500, false, true, true)
@@ -1332,11 +1527,9 @@ function compass()
 	end
 end
 
-
 function draw_info()
 	while true do wait(0)
 		if active then
-
 			local posX, posY, posZ = getCarModelCornersIn2d(getCarModel(storeCarCharIsInNoSave(PLAYER_PED)), storeCarCharIsInNoSave(PLAYER_PED))
 
 			local text1 = string.format("AIRCRAFT CAMERA %s", text_target, (active_fixview ~= nil and text_target ~= "NO TARGET" and (active_fixview and ' ~g~LOCK' or ' ~r~LOCK')  or ""))
@@ -1361,7 +1554,7 @@ function draw_info()
 
 				local text7 = text_target == "ON VEHICLE" and string.format("%s", licenseplates(id_car)) or string.format("%s(%s)", id_nickname ~= -1 and sampGetPlayerNickname(id_nickname) or 'NO DATA', id_nickname)
 				setText(test_text3[11], RusToGame(u8:decode(text7)), config.pos.info.x+(text_target == "ON VEHICLE" and 65 or 47), config.pos.info.y+40, 0.2, 1.1, 2, 1, id_nickname ~= -1 and '0xFF'..getPlayerColorHex(id_nickname) or '0xFFFFFFFF', 0.5, 0x15000000, 500, 500, false, true, true)
-				
+
 				if text_target == "ON VEHICLE" then
 					local text8 = string.format("%s(%s)", id_nickname ~= -1 and sampGetPlayerNickname(id_nickname) or 'NO DATA', id_nickname)
 					setText(test_text3[12], RusToGame(u8:decode("DRIVER:")), config.pos.info.x, config.pos.info.y+50, 0.2, 1.1, 2, 1, '0xFFFFFFFF', 0.5, 0x15000000, 500, 500, false, true, true)
@@ -1407,7 +1600,7 @@ function dectohex(input)
 end
 
 function split(str, delim, plain) -- https://www.blast.hk/threads/13380/post-231049
-    local tokens, pos, plain = {}, 1, not (plain == false) --[[ delimiter is plain text by default ]]
+    local tokens, pos, plain = {}, 1, not (plain == false)
     repeat
         local npos, epos = string.find(str, delim, pos, plain)
         table.insert(tokens, string.sub(str, pos, npos and npos - 1))
@@ -1446,6 +1639,7 @@ end
 function onScriptTerminate(LuaScript, quitGame)
     if LuaScript == thisScript() and not quitGame then
 		if active then
+			active = false
 			setNightVision(false)
 			setInfraredVision(false)
 			restoreCameraJumpcut()
@@ -1454,3 +1648,6 @@ function onScriptTerminate(LuaScript, quitGame)
 		end
     end
 end
+
+-- Licensed under the MIT License
+-- Copyright (c) 2022, dmitriyewich <https://github.com/dmitriyewich/Helicopter-Camera>
