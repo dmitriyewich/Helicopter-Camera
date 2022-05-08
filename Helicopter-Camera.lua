@@ -72,7 +72,6 @@ function copcall(f, ...)
     return coxpcall(f, id, ...)
 end
 --
-
 -- AUTHOR main hooks lib: RTD/RutreD(https://www.blast.hk/members/126461/)
 ffi.cdef[[
     int VirtualProtect(void* lpAddress, unsigned long dwSize, unsigned long flNewProtect, unsigned long* lpflOldProtect);
@@ -498,11 +497,10 @@ end
 
 local blur = ffi.cast("void (*)(float)", 0x7030A0)
 
-local active, angY = false, 0.0
+local active, draw, active_fixview, light_active, zone_active = false, false, false, false, false
+local angY, test_fov = 0.0, 70
 local text_target = "NO TARGET"
 local handle, name_model, id_model, sight_posX, sight_posY, sight_posZ, handle_fixview, who = -1, '', -1,  0, 0, 0, -1, 0
-local light_active, zone_active, active_fixview = false, false, false
-local test_fov = 70
 
 function mod(a, b)
     return a - (math.floor(a/b)*b)
@@ -1187,7 +1185,7 @@ function main()
 	if not isSampfuncsLoaded() or not isSampLoaded() then return end
 	repeat wait(0) until isSampAvailable()
 	repeat wait(0) until fixed_camera_to_skin()
-
+	print("F")
 	if not loadTexturesTXD() then return end
 
 	standard_fov = getCameraFov()
@@ -1206,9 +1204,9 @@ function main()
 		end
 	end)
 
-	lua_thread.create(compass)
 	lua_thread.create(camhack)
 	lua_thread.create(car)
+	lua_thread.create(compass)
 	lua_thread.create(zones_thread)
 	lua_thread.create(light_thread)
 	lua_thread.create(draw_info)
