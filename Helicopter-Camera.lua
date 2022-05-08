@@ -371,8 +371,8 @@ function convertTableToJsonString(config)
 	return (neatJSON(config, { wrap = 157, short = true, sort = true, aligned = true, arrayPadding = 1, afterComma = 1, beforeColon1 = 1 }))
 end
 
-function zone()
-	local zone = {{"Ависпа", "Avispa Country Club", -2667.810, -302.135, -28.831, -2646.400, -262.320, 71.169}, {"Международный Аэропорт Истер Бей", "Easter Bay Airport", -1315.420, -405.388, 15.406, -1264.400, -209.543, 25.406}, {"Ависпа", "Avispa Country Club", -2550.040, -355.493, 0.000, -2470.040, -318.493, 39.700},
+
+local zone = {{"Ависпа", "Avispa Country Club", -2667.810, -302.135, -28.831, -2646.400, -262.320, 71.169}, {"Международный Аэропорт Истер Бей", "Easter Bay Airport", -1315.420, -405.388, 15.406, -1264.400, -209.543, 25.406}, {"Ависпа", "Avispa Country Club", -2550.040, -355.493, 0.000, -2470.040, -318.493, 39.700},
 	 {"Международный Аэропорт Истер Бей", "Easter Bay Airport", -1490.330, -209.543, 15.406, -1264.400, -148.388, 25.406}, {"Гарсия", "Garcia", -2395.140, -222.589, -5.3, -2354.090, -204.792, 200.000}, {"Сшэйди Кэйбин", "Shady Cabin", -1632.830, -2263.440, -3.0, -1601.330, -2231.790, 200.000},
 	 {"Ист Лос Сантос", "East Los Santos", 2381.680, -1494.030, -89.084, 2421.030, -1454.350, 110.916}, {"Лва Фрейт Депо", "LVA Freight Depot", 1236.630, 1163.410, -89.084, 1277.050, 1203.280, 110.916}, {"Пилсон Интерсекшон", "Blackfield Intersection", 1277.050, 1044.690, -89.084, 1315.350, 1087.630, 110.916}, {"Ависпа", "Avispa Country Club", -2470.040, -355.493, 0.000, -2270.040, -318.493, 46.100}, {"Темпл", "Temple", 1252.330, -926.999, -89.084, 1357.000, -910.170, 110.916},
 	 {"Юнити Стейшен", "Unity Station", 1692.620, -1971.800, -20.492, 1812.620, -1932.800, 79.508}, {"Лва Фрейт Депо", "LVA Freight Depot", 1315.350, 1044.690, -89.084, 1375.600, 1087.630, 110.916},
@@ -453,8 +453,6 @@ function zone()
 	 {"Норт Рок", "North Rock", 2285.370, -768.027, 0.000, 2770.590, -269.740, 200.000}, {"Карьер Хантер", "Hunter Quarry", 337.244, 710.840, -115.239, 860.554, 1031.710, 203.761}, {"Международный аэропорт Лос Сантос", "Los Santos International", 1382.730, -2730.880, -89.084, 2201.820, -2394.330, 110.916}, {"Миссионер Хилл", "Missionary Hill", -2994.490, -811.276, 0.000, -2178.690, -430.276, 200.000}, {"Залив Сан Фиерро", "San Fierro Bay", -2616.400, 1659.680, -3.0, -1996.660, 2175.150, 200.000}, {"Запретная зона", "Restricted Area", -91.586, 1655.050, -50.000, 421.234, 2123.010, 250.000},
 	 {"Гора Чилиад", "Mount Chiliad", -2997.470, -1115.580, -47.917, -2178.690, -971.913, 576.083}, {"Гора Чилиад","Mount Chiliad", -2178.690, -1771.660, -47.917, -1936.120, -1250.970, 576.083}, {"Международный Аэропорт Истер Бей", "Easter Bay Airport", -1794.920, -730.118, -3.0, -1213.910, -50.096, 200.000}, {"Паноптикум ", "The Panopticon", -947.980, -304.320, -1.1, -319.676, 327.071, 200.000}, {"Шейди Крикс", "Shady Creeks", -1820.640, -2643.680, -8.0, -1226.780, -1771.660, 200.000}, {"Бэк о Бейонд", "Back o Beyond", -1166.970, -2641.190, 0.000, -321.744, -1856.030, 200.000},
 	 {"Гора Чилиад", "Mount Chiliad", -2994.490, -2189.910, -47.917, -2178.690, -1115.580, 576.083}, {"Тиерра Робада", "Tierra Robada", -1213.910, 596.349, -242.990, -480.539, 1659.680, 900.000}, {"Флинт Каунти", "Flint County", -1213.910, -2892.970, -242.990, 44.615, -768.027, 900.000}, {"Уэтстоун", "Whetstone", -2997.470, -2892.970, -242.990, -1213.910, -1115.580, 900.000}, {"Бон Каунти", "Bone County", -480.539, 596.349, -242.990, 869.461, 2993.870, 900.000}, {"Тиерра Робада", "Tierra Robada", -2997.470, 1659.680, -242.990, -480.539, 2993.870, 900.000}, {"Сан Фиерро", "San Fierro", -2997.470, -1115.580, -242.990, -1213.910, 1659.680, 900.000}, {"Лас Вентурас", "Las Venturas", 869.461, 596.349, -242.990, 2997.060, 2993.870, 900.000}, {"Рэд Каунти", "Red County", -1213.910, -768.027, -242.990, 2997.060, 596.349, 900.000}, {"Лос Сантос", "Los Santos", 44.615, -2892.970, -242.990, 2997.060, -768.027, 900.000}}
-	return zone
-end
 
 local config = {}
 
@@ -464,7 +462,7 @@ function defalut_config()
 				["language"] = {['compass'] = "EN", ['zones'] = "RU"},
 				["zones"] = {['size'] = 0.0, ['dist'] = 1000},
 				["light"] = {['multiplier'] = 4, ['auto'] = true, ['size'] = 5, ['intensity'] = 255},
-				["vehicle"] = {[497] = 497}},
+				["vehicle"] = {['497'] = 497}},
 		["pos"] = {["info"] = {['x'] = 313, ['y'] = 310},
 			["zoom"] = {['x'] = 67, ['y'] = 224},
 			["compass_text"] = {['x'] = 320.5, ['y'] = 23},
@@ -477,14 +475,13 @@ function defalut_config()
 			['zones'] = 'Z', ['light'] = 'L', },
 		['zones'] = {}
 	}
-	local zone = zone()
 	for i = 1, #zone do
 		local x, y, z = zone[i][3], zone[i][4], zone[i][5]
 		local x1, y1, z1 = zone[i][6], zone[i][7], zone[i][8]
 		local cx, cy, cz = (x+x1)/2, (y+y1)/2, (z+z1)/2
 		config.zones[#config.zones+1] = {zone[i][1], zone[i][2], cx, cy, cz}
 	end
-    savejson(convertTableToJsonString(config), "moonloader/Helicopter-Camera/Helicopter-Camera.json")
+	savejson(convertTableToJsonString(config), "moonloader/Helicopter-Camera/Helicopter-Camera.json")
 end
 
 if doesFileExist("moonloader/Helicopter-Camera/Helicopter-Camera.json") then
@@ -1184,7 +1181,7 @@ function main()
 	repeat wait(0) until memory.read(0xC8D4C0, 4, false) == 9
 	if not isSampfuncsLoaded() or not isSampLoaded() then return end
 	repeat wait(0) until isSampAvailable()
-	repeat wait(0) until fixed_camera_to_skin()
+	repeat wait(0) until doesFileExist("moonloader/Helicopter-Camera/Helicopter-Camera.json")
 
 	if not loadTexturesTXD() then return end
 
@@ -1664,10 +1661,6 @@ function RusToGame(text)
         result[i] = string.char(convtbl[c] or c)
     end
     return table.concat(result)
-end
-
-function fixed_camera_to_skin() -- проверка на приклепление камеры к скину
-	return (memory.read(getModuleHandle('gta_sa.exe') + 0x76F053, 1, false) >= 1 and true or false)
 end
 
 function dectohex(input)
