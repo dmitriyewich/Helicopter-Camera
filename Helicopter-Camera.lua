@@ -1185,7 +1185,7 @@ function main()
 	if not isSampfuncsLoaded() or not isSampLoaded() then return end
 	repeat wait(0) until isSampAvailable()
 	repeat wait(0) until fixed_camera_to_skin()
-	print("F")
+
 	if not loadTexturesTXD() then return end
 
 	standard_fov = getCameraFov()
