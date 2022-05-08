@@ -1171,7 +1171,7 @@ function AddHeliSearchLight(origin, target, targetRadius, power, coronaIndex, un
 		if normal[3] >= 0.5 then zOffset = 1 end
 		-- local result, colpoint2 = processLineOfSight(pos.x, pos.y, pos.z + zOffset, pos.x, pos.y, pos.z - 0.3, true, false, false, true, false, false, false)
 		local lres2, result2, colpoint2 = copcall(processLineOfSight, pos.x, pos.y, pos.z + zOffset, pos.x, pos.y, pos.z - 0.3, true, false, false, true, false, false, false)
-		
+
 		if lres2 and result2 then
 			pos = Vector3D(colpoint2.pos[1], colpoint2.pos[2], colpoint2.pos[3] + 1)
 			target = ffi.new("float[3]", pos.x, pos.y, pos.z+1)
@@ -1191,7 +1191,7 @@ function main()
 	if not loadTexturesTXD() then return end
 
 	standard_fov = getCameraFov()
-	
+
 	sw, sh = getScreenResolution()
 	sx, sy = memory.getfloat(0xB6EC14) * sw, memory.getfloat(0xB6EC10) * sh
 
@@ -1301,8 +1301,8 @@ function car()
 			-- local res, c = processLineOfSight(cam[1], cam[2], cam[3], pos[1], pos[2], pos[3], false, true, true, false, false, false, false, false)
 			local lres, res, c = copcall(processLineOfSight, cam[1], cam[2], cam[3], pos[1], pos[2], pos[3], false, true, true, false, false, false, false, false)
 
-			if lres and res and (c.entityType == 2 or c.entityType == 3) and (c.entityType == 2 and storeCarCharIsInNoSave(PLAYER_PED) ~= getVehiclePointerHandle(c.entity) or true) and (c.entityType == 3 and getCharPointerHandle(c.entity) ~= PLAYER_PED or true) then
-
+			if lres and res and (c.entityType == 2 or c.entityType == 3) then
+				if c.entityType == 3 and getCharPointerHandle(c.entity) ~= PLAYER_PED or storeCarCharIsInNoSave(PLAYER_PED) ~= getVehiclePointerHandle(c.entity) then
 					sight_posX, sight_posY, sight_posZ = c.pos[1], c.pos[2], c.pos[3]
 
 					handle = c.entityType == 2 and getVehiclePointerHandle(c.entity) or getCharPointerHandle(c.entity)
@@ -1321,6 +1321,7 @@ function car()
 					id_car = c.entityType == 2 and select(2, sampGetVehicleIdByCarHandle(handle)) or -1
 
 					text_target = c.entityType == 2 and "ON VEHICLE" or "ON HUMAN"
+				end
 			else
 				text_target = "NO TARGET"
 			end
