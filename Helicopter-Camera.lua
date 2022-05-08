@@ -1181,7 +1181,6 @@ function main()
 	repeat wait(0) until memory.read(0xC8D4C0, 4, false) == 9
 	if not isSampfuncsLoaded() or not isSampLoaded() then return end
 	repeat wait(0) until isSampAvailable()
-	repeat wait(0) until doesFileExist("moonloader/Helicopter-Camera/Helicopter-Camera.json")
 
 	if not loadTexturesTXD() then return end
 
