@@ -2,8 +2,8 @@ script_name('Helicopter-Camera')
 script_author('dmitriyewich, https://vk.com/dmitriyewichmods')
 script_dependencies("mimgui", "sampfuncs")
 script_properties('work-in-pause')
-script_version("1.5.5")
-script_version_number(155)
+script_version("1.5.6")
+script_version_number(156)
 
 local script = thisScript()
 require"lib.moonloader"
@@ -1055,15 +1055,14 @@ end
 function main()
 
 	repeat wait(0) until memory.read(0xC8D4C0, 4, false) == 9
+	repeat wait(0) until fixed_camera_to_skin()
 
 	if isSampLoaded() then samp, samp_v = 1, samp_ver() end
 	if samp == 1 and samp_v ~= 'unknown' then
-		repeat wait(0) until isSampAvailable()
 		vehpool = memory.getint32(memory.getint32(memory.getint32(samp_handle() + (samp_v == 'R1' and 0x21A0F8 or 0x26E8DC), false) + (samp_v == 'R1' and 0x3CD or 0x3DE), false) + (samp_v == 'R1' and 0x1C or 0xC), false)
-		pedpool = memory.getint32(memory.getint32(memory.getint32(samp_handle() + (samp_v == 'R1' and 0x21A0F8 or 0x26E8DC), false) + (samp_v == 'R1' and 0x3CD or 0x3DE), false) + (samp_v == 'R1' and 0x18 or 0xC), false)
+		pedpool = memory.getint32(memory.getint32(memory.getint32(samp_handle() + (samp_v == 'R1' and 0x21A0F8 or 0x26E8DC), false) + (samp_v == 'R1' and 0x3CD or 0x3DE), false) + (samp_v == 'R1' and 0x18 or 0x8), false)
 		SendCMD = jmp_hook.new("void(__thiscall *)(uintptr_t*, const char*)", SendCMD, samp_handle() + (samp_v == 'R1' and 0x65C60 or 0x69190))
 	end
-
 
 	if not loadTexturesTXD() then return end
 
@@ -1158,20 +1157,32 @@ end
 
 function getCarID(handle)
 	if samp_handle() ~= 0 and samp_v ~= 'unknown' then
-		return handle ~= -1 and ffi.cast('unsigned short (__thiscall *)(uintptr_t, uintptr_t)', samp_handle() + (samp_v == 'R1' and 0x1B0A0 or 0x1E440))(vehpool, getCarPointer(handle)) or -1
+		local id = ffi.cast('unsigned short (__thiscall *)(uintptr_t, uintptr_t)', samp_handle() + (samp_v == 'R1' and 0x1B0A0 or 0x1E440))(vehpool, getCarPointer(handle))
+		if id ~= nil then
+			return handle ~= -1 and id or -1
+		end
 	end
+	return -1
 end
 
 function getPedID(handle)
 	if samp_handle() ~= 0 and samp_v ~= 'unknown' then
-		return handle ~= -1 and ffi.cast('unsigned short (__thiscall *)(uintptr_t, uintptr_t)', samp_handle() + (samp_v == 'R1' and 0x10420 or 0x13570))(pedpool, getCharPointer(handle)) or -1
+		local id = ffi.cast('unsigned short (__thiscall *)(uintptr_t, uintptr_t)', samp_handle() + (samp_v == 'R1' and 0x10420 or 0x13570))(pedpool, getCharPointer(handle))
+		if id ~= nil then
+			return handle ~= -1 and id or -1
+		end
 	end
+	return -1
 end
 
 function GetName(id)
 	if samp_handle() ~= 0 and samp_v ~= 'unknown' then
-		return id ~= 65535 and ffi.string(ffi.cast('const char*(__thiscall *)(uintptr_t, unsigned short)', samp_handle() + (samp_v == 'R1' and 0x13CE0 or 0x16F00))(pedpool, id)) or -1
+		local nick = ffi.cast('const char*(__thiscall *)(uintptr_t, unsigned short)', samp_handle() + (samp_v == 'R1' and 0x13CE0 or 0x16F00))(pedpool, id)
+		if nick ~= nil then
+			return id ~= 65535 and ffi.string(nick) or -1
+		end
 	end
+	return 'unknown'
 end
 
 function GetColorAsARGB(id)
@@ -1547,6 +1558,10 @@ function convertW(xy)
 	local wposX, wposY = convertWindowScreenCoordsToGameScreenCoords(xy, xy)
 	local cWtbl = {['x'] = wposX, ['y'] = wposY}
 	return cWtbl
+end
+
+function fixed_camera_to_skin() -- проверка на приклепление камеры к скину
+	return (memory.read(getModuleHandle('gta_sa.exe') + 0x76F053, 1, false) >= 1 and true or false)
 end
 
 function Reset()
