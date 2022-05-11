@@ -1146,11 +1146,11 @@ function zones_thread()
 			end
 		end
 	end
-end
+end	
 
 function licenseplates(id)
 	local plate
-	if samp_handle() ~= 0 and samp_v ~= 'unknown' then
+	if samp_handle() ~= 0 and samp_v ~= 'unknown' and id ~= -1 then
 		plate = memory.tostring(memory.getint32(vehpool + 0x1134 + id * 4, false) + 0x93, 32, false)
 	end
 	return plate
@@ -1158,19 +1158,19 @@ end
 
 function getCarID(handle)
 	if samp_handle() ~= 0 and samp_v ~= 'unknown' then
-		return ffi.cast( 'unsigned short (__thiscall *)(uintptr_t, uintptr_t)', samp_handle() + (samp_v == 'R1' and 0x1B0A0 or 0x1E440))(vehpool, getCarPointer(handle))
+		return handle ~= -1 and ffi.cast('unsigned short (__thiscall *)(uintptr_t, uintptr_t)', samp_handle() + (samp_v == 'R1' and 0x1B0A0 or 0x1E440))(vehpool, getCarPointer(handle)) or -1
 	end
 end
 
 function getPedID(handle)
 	if samp_handle() ~= 0 and samp_v ~= 'unknown' then
-		return ffi.cast( 'unsigned short (__thiscall *)(uintptr_t, uintptr_t)', samp_handle() + (samp_v == 'R1' and 0x10420 or 0x13570))(pedpool, getCharPointer(handle))
+		return handle ~= -1 and ffi.cast('unsigned short (__thiscall *)(uintptr_t, uintptr_t)', samp_handle() + (samp_v == 'R1' and 0x10420 or 0x13570))(pedpool, getCharPointer(handle)) or -1
 	end
 end
 
 function GetName(id)
 	if samp_handle() ~= 0 and samp_v ~= 'unknown' then
-		return ffi.string(ffi.cast( 'const char*(__thiscall *)(uintptr_t, unsigned short)', samp_handle() + (samp_v == 'R1' and 0x13CE0 or 0x16F00))(pedpool, id))
+		return id ~= 65535 and ffi.string(ffi.cast('const char*(__thiscall *)(uintptr_t, unsigned short)', samp_handle() + (samp_v == 'R1' and 0x13CE0 or 0x16F00))(pedpool, id)) or -1
 	end
 end
 
@@ -1203,6 +1203,7 @@ function car()
 					drawIcon(1, 2, convertW(wposX).x, convertW(wposY).y, 42, 50, 0xDAFAFAFA)
 					if samp == 1 then
 						id_nickname = c.entityType == 2 and getPedID(getDriverOfCar(handle)) or getPedID(handle)
+
 						id_car = c.entityType == 2 and getCarID(handle) or -1
 					end
 					text_target = c.entityType == 2 and "ON VEHICLE" or "ON HUMAN"
@@ -1232,7 +1233,7 @@ function car()
 						active_fixview = false
 						while true do wait(0)
 							drawIcon(1, 3, config.pos.info.x+15, config.pos.info.y+28, 35, 40, 0xDAFAFAFA)
-							setText(test_text3[1], RusToGame(u8:decode('~r~CONNECTION LOST')), 343, 334, 0.2, 1.1, 2, 1, '0xFFFFFFFF', 0.5, 0x15000000, 500, 500, false, true, true)
+							setText(test_text3[1], RusToGame(u8:decode('~r~CONNECTION LOST')), config.pos.info.x+30, config.pos.info.y+24, 0.2, 1.1, 2, 1, '0xFFFFFFFF', 0.5, 0x15000000, 500, 500, false, true, true)
 							if os.clock() - timer > 2 or active_fixview then break end
 						end
 					end)
@@ -1457,7 +1458,7 @@ function draw_info()
 		if active then
 			local posX, posY, posZ = getCarModelCornersIn2d(getCarModel(storeCarCharIsInNoSave(PLAYER_PED)), storeCarCharIsInNoSave(PLAYER_PED))
 
-			local text1 = string.format("AIRCRAFT CAMERA %s %s", text_target, (active_fixview ~= nil and text_target ~= "NO TARGET" and (active_fixview and ' ~g~LOCK' or ' ~r~LOCK') or ""))
+			local text1 = string.format("AIRCRAFT CAMERA %s %s", text_target, ((active_fixview ~= nil and text_target ~= "NO TARGET") and (active_fixview and ' ~g~LOCK' or ' ~r~LOCK') or "	"))
 			setText(test_text3[5], RusToGame(u8:decode(text1)), config.pos.info.x+7, config.pos.info.y-10, 0.2, 1.1, 2, 1, '0xFFFFFFFF', 0.5, 0x15000000, 500, 500, false, true, true)
 
 			local text2 = string.format("MY POS X: %s Y: %s Z: %s", math.round(posX, 1), math.round(posY, 1), math.round(posZ, 1))
