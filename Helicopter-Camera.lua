@@ -1146,7 +1146,7 @@ function zones_thread()
 			end
 		end
 	end
-end	
+end
 
 function licenseplates(id)
 	local plate
@@ -1185,7 +1185,7 @@ function car()
 		if active then
 			sight_posX, sight_posY, sight_posZ = 0, 0, 0
 			local pos, cam = {convertScreenCoordsToWorld3D(sw / 2, sh / 2, 700.0)}, getAC_PA()[1]
-			local lres, res, c = copcall(processLineOfSight, cam[1], cam[2], cam[3], pos[1], pos[2], pos[3], false, true, true, false, false, false, false, false)
+			local lres, res, c = copcall(processLineOfSight, cam[1], cam[2], cam[3], pos[1], pos[2], pos[3], true, true, true, true, true, true, true, true)
 
 			if lres and res and (c.entityType == 2 or c.entityType == 3) then
 				if c.entityType == 3 and getCharPointerHandle(c.entity) ~= PLAYER_PED or storeCarCharIsInNoSave(PLAYER_PED) ~= getVehiclePointerHandle(c.entity) then
